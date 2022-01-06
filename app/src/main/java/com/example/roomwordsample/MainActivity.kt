@@ -1,11 +1,23 @@
 package com.example.roomwordsample
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.observe
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class MainActivity : AppCompatActivity() {
+
+    private val wordViewModel: WordViewModel by viewModels {
+        WordViewModelFactory((application as WordsApplication).repository)
+    }
+
+    private val newWordActivityRequestCode = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -15,5 +27,44 @@ class MainActivity : AppCompatActivity() {
         val adapter = WordListAdapter()
         recyclerView.adapter = adapter
         recyclerView.layoutManager = LinearLayoutManager(this)
+
+        /** Добавляем наблюдателя к LiveData, возвращаемому getAlphabetizedWords.
+        Метод submitList() срабатывает, когда наблюдаемые данные изменяются и
+        активити находится на переднем плане.
+         */
+        wordViewModel.allWords.observe(owner = this) { words ->
+            // Update the cached copy of the words in the adapter.
+            words.let { adapter.submitList(it) }
+        }
+
+        /**
+         * Обработка кнопки FAB
+         */
+        val fab = findViewById<FloatingActionButton>(R.id.fab)
+        fab.setOnClickListener {
+            val intent = Intent(this@MainActivity, NewWordActivity::class.java)
+            startActivityForResult(intent, newWordActivityRequestCode)
+        }
+    }
+
+    /**
+     * Если activity возвращается с RESULT_OK, вставляем возвращенное слово в базу данных,
+     * вызвав insert()
+     */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == newWordActivityRequestCode && resultCode == Activity.RESULT_OK) {
+            data?.getStringExtra(NewWordActivity.EXTRA_REPLY)?.let {
+                val word = Word(it)
+                wordViewModel.insert(word)
+            }
+        } else {
+            Toast.makeText(
+                applicationContext,
+                R.string.empty_not_saved,
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 }
